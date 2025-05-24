@@ -1,0 +1,37 @@
+# .foxfiles/.gitignore
+# Nix build outputs
+result
+result-*
+
+# direnv environment
+.direnv/
+
+# Lix package management
+.haxelib/
+.lix/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build directories
+dist/
+build/
+
+# Logs
+logs/
+*.log
+
+# Environment variables
+.env
+.env.*
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# FoxOS specific
+foxos_data/

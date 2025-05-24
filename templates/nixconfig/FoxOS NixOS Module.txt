@@ -1,0 +1,77 @@
+# .foxfiles/modules/nixos/default.nix
+{ config, lib, pkgs, ... }:
+
+with lib;
+
+let
+  cfg = config.services.foxos;
+in {
+  options.services.foxos = {
+    enable = mkEnableOption "Enable FoxOS system service";
+    
+    dataDir = mkOption {
+      type = types.str;
+      default = "/var/lib/foxos";
+      description = "Directory for FoxOS system data files";
+    };
+    
+    configFile = mkOption {
+      type = types.path;
+      default = "/etc/foxos/config.toml";
+      description = "Path to FoxOS system configuration file";
+    };
+    
+    user = mkOption {
+      type = types.str;
+      default = "foxos";
+      description = "User account under which FoxOS service runs";
+    };
+    
+    group = mkOption {
+      type = types.str;
+      default = "foxos";
+      description = "Group under which FoxOS service runs";
+    };
+  };
+  
+  config = mkIf cfg.enable {
+    # Create user and group
+    users.users.${cfg.user} = {
+      isSystemUser = true;
+      group = cfg.group;
+      description = "FoxOS service user";
+      home = cfg.dataDir;
+      createHome = true;
+    };
+    
+    users.groups.${cfg.group} = {};
+    
+    # Install the package
+    environment.systemPackages = [ pkgs.foxos ];
+    
+    # Create service
+    systemd.services.foxos = {
+      description = "FoxOS Service";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network.target" ];
+      
+      serviceConfig = {
+        User = cfg.user;
+        Group = cfg.group;
+        ExecStart = "${pkgs.foxos}/bin/foxos --config ${cfg.configFile}";
+        Restart = "on-failure";
+        WorkingDirectory = cfg.dataDir;
+      };
+    };
+    
+    # Ensure config directory exists
+    environment.etc."foxos/config.toml".text = ''
+      # Default FoxOS system configuration
+      version = "0.1.0"
+      
+      [system]
+      log_level = "info"
+      auto_update = false
+    '';
+  };
+}

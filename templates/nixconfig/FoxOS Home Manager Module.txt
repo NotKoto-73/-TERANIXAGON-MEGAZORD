@@ -1,0 +1,49 @@
+# .foxfiles/modules/home-manager/default.nix
+{ config, lib, pkgs, ... }:
+
+with lib;
+
+let
+  cfg = config.programs.foxos;
+in {
+  options.programs.foxos = {
+    enable = mkEnableOption "Enable FoxOS environment";
+    
+    dataDir = mkOption {
+      type = types.str;
+      default = "${config.home.homeDirectory}/.local/share/foxos";
+      description = "Directory for FoxOS data files";
+    };
+    
+    configDir = mkOption {
+      type = types.str;
+      default = "${config.xdg.configHome}/foxos";
+      description = "Directory for FoxOS configuration";
+    };
+  };
+  
+  config = mkIf cfg.enable {
+    home.packages = with pkgs; [
+      # Add necessary packages here
+    ];
+    
+    # Ensure directories exist
+    home.file = {
+      "${cfg.dataDir}/.keep".text = "";
+      "${cfg.configDir}/.keep".text = "";
+    };
+    
+    # Additional configuration
+    xdg.configFile."foxos/config.toml".text = ''
+      # Default FoxOS configuration
+      version = "0.1.0"
+      
+      [user]
+      name = "player"
+      
+      [system]
+      theme = "default"
+      debug = false
+    '';
+  };
+}

@@ -1,0 +1,323 @@
+# 🦊 FoxOS ISO Generation Pipeline
+# Automated stable/unstable release system
+
+{ inputs, lib, ... }:
+
+let
+  # Release channel configuration
+  releases = {
+    stable = {
+      nixpkgs = inputs.nixpkgs;
+      suffix = "stable";
+      profile = "foxos-stable";
+      bootTimeout = 30;
+      features = {
+        developmentTools = false;
+        experimentalKernel = false;
+        debugMode = false;
+      };
+    };
+    
+    unstable = {
+      nixpkgs = inputs.nixpkgs-unstable;
+      suffix = "unstable-dev";
+      profile = "foxos-dev";
+      bootTimeout = 10;
+      features = {
+        developmentTools = true;
+        experimentalKernel = true;
+        debugMode = true;
+      };
+    };
+  };
+
+  # Generate ISO configuration for a specific release
+  mkFoxOSISO = release: releaseConfig: {
+    imports = [
+      inputs.nixos-generators.nixosModules.all-formats
+      ./iso-profiles/${releaseConfig.profile}.nix
+      ../systems/foxos/iso-base.nix
+    ];
+
+    # ISO-specific configuration
+    isoImage = {
+      isoName = "foxos-${release}-${releaseConfig.suffix}.iso";
+      makeEfiBootable = true;
+      makeUsbBootable = true;
+      
+      # Custom ISO branding
+      appendToMenuLabel = " - FoxOS ${lib.toUpper release}";
+      edition = "FoxOS";
+      
+      # Boot configuration
+      grubTheme = ./themes/iso-grub/foxos-installer;
+      splashImage = ./assets/foxos-splash.png;
+      
+      # Include essential tools
+      includeSystemBuildDependencies = releaseConfig.features.developmentTools;
+    };
+
+    # System configuration for live environment
+    system.stateVersion = "24.05";
+    
+    # Live user setup
+    users.users.foxos = {
+      isNormalUser = true;
+      description = "FoxOS Live User";
+      extraGroups = [ "wheel" "networkmanager" "video" "audio" ];
+      initialPassword = "foxos";
+      shell = pkgs.zsh;
+    };
+
+    # Auto-login for live session
+    services.xserver.displayManager.autoLogin = {
+      enable = true;
+      user = "foxos";
+    };
+
+    # Essential packages for installer
+    environment.systemPackages = with pkgs; [
+      # Installer tools
+      nixos-install-tools
+      gparted
+      disko
+      
+      # System utilities
+      git
+      curl
+      wget
+      neovim
+      firefox
+      
+      # FoxOS specific tools
+      (writeShellScriptBin "foxos-install" ''
+        echo "🦊 Welcome to FoxOS Installation"
+        echo "Choose your installation type:"
+        echo "1) Standard FoxOS (Recommended)"
+        echo "2) Developer Setup (All quadrants)"
+        echo "3) Custom Configuration"
+        read -p "Selection: " choice
+        
+        case $choice in
+          1) nixos-install --flake github:notkoto73/foxos#frostnix ;;
+          2) nixos-install --flake github:notkoto73/foxos#dev-full ;;
+          3) echo "Visit: foxos.dev/install for custom setup" ;;
+        esac
+      '')
+      
+      (writeShellScriptBin "foxos-demo" ''
+        echo "🦊 FoxOS Feature Demo"
+        echo "This would showcase:"
+        echo "- Quadrant system"
+        echo "- Toggle management" 
+        echo "- Theme switching"
+        echo "- Multi-OS capabilities"
+      '')
+    ];
+
+    # Live session specific services
+    services = {
+      # Network management
+      networkmanager.enable = true;
+      
+      # SSH for remote assistance
+      openssh = {
+        enable = true;
+        settings.PasswordAuthentication = true;
+      };
+      
+      # Display manager
+      xserver = {
+        enable = true;
+        desktopManager.plasma5.enable = !releaseConfig.features.debugMode;
+        windowManager.i3.enable = releaseConfig.features.debugMode;
+      };
+    };
+
+    # Boot loader configuration for ISO
+    boot = {
+      loader.timeout = releaseConfig.bootTimeout;
+      
+      # Enable experimental features for unstable
+      kernelPackages = if releaseConfig.features.experimentalKernel
+        then pkgs.linuxPackages_zen
+        else pkgs.linuxPackages;
+    };
+
+    # Networking
+    networking = {
+      hostName = "foxos-live";
+      networkmanager.enable = true;
+      wireless.enable = false; # Conflicts with NetworkManager
+    };
+  };
+
+in {
+  # Generate both stable and unstable ISOs
+  foxos-stable-iso = mkFoxOSISO "stable" releases.stable;
+  foxos-unstable-iso = mkFoxOSISO "unstable" releases.unstable;
+  
+  # Build scripts for automated generation
+  packages = {
+    build-stable-iso = pkgs.writeShellScriptBin "build-foxos-stable" ''
+      echo "🦊 Building FoxOS Stable ISO..."
+      nix build .#foxos-stable-iso
+      echo "✅ Built: foxos-stable-${releases.stable.suffix}.iso"
+    '';
+    
+    build-unstable-iso = pkgs.writeShellScriptBin "build-foxos-unstable" ''
+      echo "🦊 Building FoxOS Unstable ISO..."  
+      nix build .#foxos-unstable-iso
+      echo "✅ Built: foxos-unstable-${releases.unstable.suffix}.iso"
+    '';
+    
+    build-all-isos = pkgs.writeShellScriptBin "build-foxos-all" ''
+      echo "🦊 Building all FoxOS ISOs..."
+      nix build .#foxos-stable-iso
+      nix build .#foxos-unstable-iso
+      echo "✅ Built all ISO variants"
+      
+      # Generate checksums
+      sha256sum result-*/*.iso > foxos-checksums.txt
+      echo "📄 Generated checksums: foxos-checksums.txt"
+    '';
+    
+    release-pipeline = pkgs.writeShellScriptBin "foxos-release" ''
+      #!/usr/bin/env bash
+      set -euo pipefail
+      
+      VERSION=${1:-$(date +%Y.%m.%d)}
+      
+      echo "🦊 FoxOS Release Pipeline v$VERSION"
+      
+      # Build ISOs
+      echo "📀 Building ISOs..."
+      nix build .#foxos-stable-iso
+      nix build .#foxos-unstable-iso
+      
+      # Create release directory
+      RELEASE_DIR="foxos-release-$VERSION"
+      mkdir -p "$RELEASE_DIR"
+      
+      # Copy ISOs with versioned names
+      cp result-foxos-stable-iso/iso/*.iso "$RELEASE_DIR/foxos-stable-$VERSION.iso"
+      cp result-foxos-unstable-iso/iso/*.iso "$RELEASE_DIR/foxos-unstable-$VERSION.iso"
+      
+      # Generate metadata
+      cat > "$RELEASE_DIR/release-info.json" << EOF
+      {
+        "version": "$VERSION",
+        "date": "$(date -Iseconds)",
+        "releases": {
+          "stable": {
+            "filename": "foxos-stable-$VERSION.iso",
+            "nixpkgs": "${releases.stable.nixpkgs.rev or "unknown"}",
+            "features": ${builtins.toJSON releases.stable.features}
+          },
+          "unstable": {
+            "filename": "foxos-unstable-$VERSION.iso", 
+            "nixpkgs": "${releases.unstable.nixpkgs.rev or "unknown"}",
+            "features": ${builtins.toJSON releases.unstable.features}
+          }
+        }
+      }
+      EOF
+      
+      # Generate checksums
+      cd "$RELEASE_DIR"
+      sha256sum *.iso > checksums.txt
+      
+      echo "✅ Release ready: $RELEASE_DIR/"
+      echo "📤 Upload to your hosting platform!"
+    '';
+  };
+  
+  # GitHub Actions integration
+  github-actions = {
+    build-and-release = pkgs.writeText ".github-workflows-release.yml" ''
+      name: FoxOS Release Pipeline
+      
+      on:
+        push:
+          tags: ['v*']
+        workflow_dispatch:
+          inputs:
+            release_type:
+              description: 'Release type'
+              required: true
+              default: 'both'
+              type: choice
+              options: ['stable', 'unstable', 'both']
+      
+      jobs:
+        build-iso:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v4
+            - uses: cachix/install-nix-action@v22
+            - uses: cachix/cachix-action@v12
+              with:
+                name: foxos
+                authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+            
+            - name: Build ISOs
+              run: |
+                if [[ "${{ github.event.inputs.release_type }}" == "both" || "${{ github.event.inputs.release_type }}" == "stable" ]]; then
+                  nix build .#foxos-stable-iso
+                fi
+                if [[ "${{ github.event.inputs.release_type }}" == "both" || "${{ github.event.inputs.release_type }}" == "unstable" ]]; then
+                  nix build .#foxos-unstable-iso  
+                fi
+            
+            - name: Create Release
+              uses: softprops/action-gh-release@v1
+              with:
+                files: |
+                  result*/iso/*.iso
+                  foxos-checksums.txt
+                body: |
+                  🦊 FoxOS Release ${{ github.ref_name }}
+                  
+                  ## What's New
+                  - Latest NixOS packages
+                  - Updated FoxOS framework
+                  - Enhanced installer experience
+                  
+                  ## Download Options
+                  - **Stable**: Recommended for daily use
+                  - **Unstable**: Latest features, may be unstable
+                  
+                  ## Installation
+                  1. Download ISO
+                  2. Create bootable USB
+                  3. Boot and run `foxos-install`
+                  
+                  Verify checksums before installation!
+    '';
+  };
+}
+
+# 📁 Additional files needed:
+
+# ./iso-profiles/foxos-stable.nix
+{
+  imports = [
+    ../quadrants/frostcore.nix
+    ../foundation/essential-only.nix
+  ];
+  
+  foxos.profile = "stable";
+  foxos.installer.mode = "guided";
+}
+
+# ./iso-profiles/foxos-dev.nix  
+{
+  imports = [
+    ../quadrants/frostcore.nix
+    ../quadrants/south-soleflare.nix
+    ../foundation/development.nix
+  ];
+  
+  foxos.profile = "development";
+  foxos.installer.mode = "advanced"; 
+}

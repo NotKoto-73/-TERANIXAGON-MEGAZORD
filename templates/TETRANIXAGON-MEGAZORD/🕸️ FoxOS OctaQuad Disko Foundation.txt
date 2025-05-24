@@ -1,0 +1,689 @@
+# 🕸️ FoxOS OctaQuad Disko Foundation
+# "Structure before simplicity. Meaning before magic."
+# 
+# Eight-legged disk layout for the modular fox
+# NESW Quadrants + Core + Vault + Swap + External realms
+
+{ config, lib, pkgs, ... }:
+
+{
+  # 🧊 FROSTCORE CONFIGURATION
+  # Main NVMe - The heart of the spider web
+  disko.devices = {
+    disk = {
+      # Primary NVMe - FoxOS Octaquad Layout
+      fox-nvme = {
+        type = "disk";
+        device = "/dev/nvme0n1";
+        content = {
+          type = "gpt";
+          partitions = {
+            
+            # 🥾 EFI Boot Partition
+            esp = {
+              size = "1G";
+              type = "efi";
+              content = {
+                type = "filesystem";
+                format = "fat32";
+                mountpoint = "/boot";
+              };
+            };
+
+            # ❄️ CORE - Ephemeral Root (Frostcore Central)
+            core = {
+              size = "50G";
+              content = {
+                type = "luks";
+                name = "fox-frostcore";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "btrfs";
+                  extraArgs = [ "-L" "frostcore" ];
+                  subvolumes = {
+                    "@root" = { 
+                      mountpoint = "/";
+                      mountOptions = [ "compress=zstd" "noatime" ];
+                    };
+                    "@nix" = { 
+                      mountpoint = "/nix"; 
+                      mountOptions = [ "compress=zstd" "noatime" ];
+                    };
+                    "@persist" = { 
+                      mountpoint = "/persist";
+                      mountOptions = [ "compress=zstd" "noatime" ];
+                    };
+                  };
+                };
+              };
+            };
+
+            # ❄️ NORTH - Frostlands (System Configuration)  
+            north = {
+              size = "80G";
+              content = {
+                type = "luks";
+                name = "north-frostlands";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "btrfs";
+                  extraArgs = [ "-L" "frostlands" ];
+                  subvolumes = {
+                    "@configs" = { 
+                      mountpoint = "/frost/configs";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@system" = { 
+                      mountpoint = "/frost/system";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@bootstrap" = { 
+                      mountpoint = "/frost/bootstrap";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                  };
+                };
+              };
+            };
+
+            # 🌅 EAST - Kitsune Territory (Secrets & Networks)
+            east = {
+              size = "100G";
+              content = {
+                type = "luks";
+                name = "east-kitsune";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "btrfs";
+                  extraArgs = [ "-L" "kitsune" ];
+                  subvolumes = {
+                    "@secrets" = { 
+                      mountpoint = "/kitsune/secrets";
+                      mountOptions = [ "compress=zstd" "noatime" ];
+                    };
+                    "@network" = { 
+                      mountpoint = "/kitsune/network";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@ghost" = { 
+                      mountpoint = "/kitsune/ghost";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                  };
+                };
+              };
+            };
+
+            # 🔥 SOUTH - Soleflare Wildlands (Performance & Gaming) 
+            south = {
+              size = "120G";
+              content = {
+                type = "luks";
+                name = "south-soleflare";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "btrfs";
+                  extraArgs = [ "-L" "soleflare" ];
+                  subvolumes = {
+                    "@performance" = { 
+                      mountpoint = "/soleflare/performance";
+                      mountOptions = [ "compress=zstd" "noatime" ];
+                    };
+                    "@gaming" = { 
+                      mountpoint = "/soleflare/gaming";
+                      mountOptions = [ "compress=zstd" "ssd" ];
+                    };
+                    "@chaos" = { 
+                      mountpoint = "/soleflare/chaos";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@media" = { 
+                      mountpoint = "/soleflare/media";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                  };
+                };
+              };
+            };
+
+            # 🦊 WEST - Reddfox Enterprise (VMs & Dual-boot)
+            west = {
+              size = "130G";
+              content = {
+                type = "luks";
+                name = "west-reddfox";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "btrfs";
+                  extraArgs = [ "-L" "reddfox" ];
+                  subvolumes = {
+                    "@enterprise" = { 
+                      mountpoint = "/reddfox/enterprise";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@vms" = { 
+                      mountpoint = "/reddfox/vms";
+                      mountOptions = [ "compress=zstd" "ssd" ];
+                    };
+                    "@containers" = { 
+                      mountpoint = "/reddfox/containers";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                  };
+                };
+              };
+            };
+
+            # 🗄️ VAULT - Den Storage (Projects & Media)
+            vault = {
+              size = "300G";
+              content = {
+                type = "luks";
+                name = "fox-vault";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "btrfs";
+                  extraArgs = [ "-L" "foxvault" ];
+                  subvolumes = {
+                    "@projects" = { 
+                      mountpoint = "/den/projects";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@media" = { 
+                      mountpoint = "/den/media";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@archive" = { 
+                      mountpoint = "/den/archive";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                  };
+                };
+              };
+            };
+
+            # 💤 Encrypted Swap
+            swap = {
+              size = "32G";
+              content = {
+                type = "luks";
+                name = "fox-swap";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "swap";
+                  randomEncryption = true;
+                };
+              };
+            };
+
+            # 📦 Qubes VM Manager Zone
+            qubes = {
+              size = "100G";
+              content = {
+                type = "luks";
+                name = "qubes-realm";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "ext4";
+                  mountpoint = "/qubes";
+                };
+              };
+            };
+
+            # 🐧 Arch Linux Territory
+            arch = {
+              size = "80G";
+              content = {
+                type = "luks";
+                name = "arch-realm";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "ext4";
+                  mountpoint = "/arch";
+                };
+              };
+            };
+
+            # 🦅 Garuda Gaming Realm
+            garuda = {
+              size = "80G";
+              content = {
+                type = "luks";
+                name = "garuda-realm";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "ext4";
+                  mountpoint = "/garuda";
+                };
+              };
+            };
+          };
+        };
+      };
+
+      # 💼 Windows LTSC Enterprise/IoT Disk (1TB NVME/SSD)
+      windows-ltsc = {
+        type = "disk";
+        device = "/dev/nvme1n1"; # Adjust to your Windows disk
+        content = {
+          type = "gpt";
+          partitions = {
+            # Windows EFI System Partition
+            windows-esp = {
+              size = "260M";
+              type = "efi";
+              content = {
+                type = "filesystem";
+                format = "fat32";
+                mountpoint = "/mnt/windows/efi";
+              };
+            };
+            
+            # Microsoft Reserved Partition
+            msr = {
+              size = "128M";
+              type = "msr";
+            };
+            
+            # C: Drive - Makoto-system (OS only, no user data)
+            makoto-system = {
+              size = "120G";
+              content = {
+                type = "filesystem";
+                format = "ntfs";
+                mountpoint = "/mnt/windows/makoto-system";
+                mountOptions = [ "uid=1000" "gid=100" "dmask=022" "fmask=133" ];
+              };
+            };
+            
+            # D: Drive - User-Koto (User profiles & AppData)
+            user-koto = {
+              size = "80G";
+              content = {
+                type = "filesystem";
+                format = "ntfs";  
+                mountpoint = "/mnt/windows/user-koto";
+                mountOptions = [ "uid=1000" "gid=100" "dmask=022" "fmask=133" ];
+              };
+            };
+            
+            # E: Drive - Programs (Additional software)
+            programs = {
+              size = "100G";
+              content = {
+                type = "filesystem";
+                format = "ntfs";
+                mountpoint = "/mnt/windows/programs";
+                mountOptions = [ "uid=1000" "gid=100" "dmask=022" "fmask=133" ];
+              };
+            };
+            
+            # F: Drive - Games
+            games = {
+              size = "200G";
+              content = {
+                type = "filesystem";
+                format = "ntfs";
+                mountpoint = "/mnt/windows/games";
+                mountOptions = [ "uid=1000" "gid=100" "dmask=022" "fmask=133" ];
+              };
+            };
+            
+            # G: Drive - Work/Projects
+            work = {
+              size = "150G";
+              content = {
+                type = "filesystem";
+                format = "ntfs";
+                mountpoint = "/mnt/windows/work";
+                mountOptions = [ "uid=1000" "gid=100" "dmask=022" "fmask=133" ];
+              };
+            };
+            
+            # Recovery partition (Windows standard)
+            recovery = {
+              size = "1G";
+              content = {
+                type = "filesystem";
+                format = "ntfs";
+                mountpoint = "/mnt/windows/recovery";
+              };
+            };
+            
+            # Remaining space for expansion
+            expansion = {
+              size = "100%";
+              content = {
+                type = "filesystem";
+                format = "ntfs";
+                mountpoint = "/mnt/windows/expansion";
+                mountOptions = [ "uid=1000" "gid=100" "dmask=022" "fmask=133" ];
+              };
+            };
+          };
+        };
+      };
+
+      # 🗃️ Archive SSD (2TB) - Cold Storage & Documents  
+      fox-archive = {
+        type = "disk";
+        device = "/dev/sda"; # Your 2TB SSD
+        content = {
+          type = "gpt";
+          partitions = {
+            archive = {
+              size = "100%";
+              content = {
+                type = "luks";
+                name = "fox-archive";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "btrfs";
+                  extraArgs = [ "-L" "archive" ];
+                  subvolumes = {
+                    "@documents" = { 
+                      mountpoint = "/archive/documents";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@downloads" = { 
+                      mountpoint = "/archive/downloads";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@backups" = { 
+                      mountpoint = "/archive/backups";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@iso-vault" = {
+                      mountpoint = "/archive/iso-vault";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@vm-images" = {
+                      mountpoint = "/archive/vm-images"; 
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                  };
+                };
+              };
+            };
+          };
+        };
+      };
+
+      # 🎵 Audio SSD (1TB) - Media Production & Music
+      fox-audio = {
+        type = "disk";
+        device = "/dev/sdb"; # Your 1TB Audio SSD
+        content = {
+          type = "gpt";
+          partitions = {
+            audio = {
+              size = "100%";
+              content = {
+                type = "luks";
+                name = "fox-audio";
+                passwordFile = "/tmp/secret.key";
+                content = {
+                  type = "btrfs";
+                  extraArgs = [ "-L" "audio" ];
+                  subvolumes = {
+                    "@music" = { 
+                      mountpoint = "/audio/music";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@samples" = { 
+                      mountpoint = "/audio/samples";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@production" = { 
+                      mountpoint = "/audio/production";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@daw-projects" = {
+                      mountpoint = "/audio/daw-projects";
+                      mountOptions = [ "compress=zstd" "ssd" ];
+                    };
+                    "@stems-bounces" = {
+                      mountpoint = "/audio/stems-bounces";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                    "@libraries" = {
+                      mountpoint = "/audio/libraries";
+                      mountOptions = [ "compress=zstd" ];
+                    };
+                  };
+                };
+              };
+            };
+          };
+        };
+      };
+
+      # 🧪 Weirdos SSD (500GB) - Experimental OS Zone
+      fox-weirdos = {
+        type = "disk";
+        device = "/dev/sdc";
+        content = {
+          type = "gpt";
+          partitions = {
+            guix = {
+              size = "150G";
+              content = {
+                type = "ext4";
+                mountpoint = "/weirdos/guix";
+              };
+            };
+            templeos = {
+              size = "50G";
+              content = {
+                type = "fat32";
+                mountpoint = "/weirdos/templeos";
+              };
+            };
+            haiku = {
+              size = "100G";
+              content = {
+                type = "ext4";
+                mountpoint = "/weirdos/haiku";
+              };
+            };
+            openindiana = {
+              size = "150G";
+              content = {
+                type = "ext4";
+                mountpoint = "/weirdos/openindiana";
+              };
+            };
+            experimental = {
+              size = "50G";
+              content = {
+                type = "ext4";
+                mountpoint = "/weirdos/experimental";
+              };
+            };
+          };
+        };
+      };
+    };
+  };
+
+  # 🔧 Filesystem tweaks and mount options
+  fileSystems = {
+    # Tmpfs for ephemeral root (optional)
+    "/" = lib.mkIf config.foxos.ephemeral.enable {
+      device = "tmpfs";
+      fsType = "tmpfs";
+      options = [ "defaults" "size=8G" "mode=755" ];
+    };
+  };
+
+  # 🔐 LUKS key management  
+  environment.etc."crypttab".text = ''
+    # FoxOS Quadrant LUKS mappings
+    fox-frostcore    /dev/nvme0n1p2    /persist/keys/frostcore.key    luks
+    north-frostlands /dev/nvme0n1p3    /persist/keys/north.key        luks
+    east-kitsune     /dev/nvme0n1p4    /persist/keys/east.key         luks
+    south-soleflare  /dev/nvme0n1p5    /persist/keys/south.key        luks  
+    west-reddfox     /dev/nvme0n1p6    /persist/keys/west.key         luks
+    fox-vault        /dev/nvme0n1p7    /persist/keys/vault.key        luks
+    fox-swap         /dev/nvme0n1p8    /persist/keys/swap.key         luks
+    
+    # Multi-disk LUKS mappings
+    fox-archive      /dev/sda1         /persist/keys/archive.key      luks
+    fox-audio        /dev/sdb1         /persist/keys/audio.key        luks
+    
+    # Note: Windows LTSC partitions remain unencrypted (NTFS)
+    # BitLocker can be enabled from Windows side if desired
+  '';
+
+  # 🦊 FoxOS Complete Storage Ecosystem
+  foxos = {
+    quadrants = {
+      north.enable = true;   # ❄️ Frostlands - Base system
+      east.enable = true;    # 🌅 Kitsune - Secrets & network  
+      south.enable = false;  # 🔥 Soleflare - Performance (toggle)
+      west.enable = false;   # 🦊 Reddfox - Enterprise (toggle)
+    };
+    
+    vault.enable = true;     # 🗄️ Always mount vault
+    ephemeral.enable = true; # 💨 Ephemeral root
+    
+    # 🕸️ Complete storage web mount structure
+    mountPoints = {
+      # FoxOS Core Quadrants
+      "/frost" = "/dev/mapper/north-frostlands";
+      "/kitsune" = "/dev/mapper/east-kitsune"; 
+      "/soleflare" = "/dev/mapper/south-soleflare";
+      "/reddfox" = "/dev/mapper/west-reddfox";
+      "/den" = "/dev/mapper/fox-vault";
+      
+      # Multi-disk ecosystem  
+      "/archive" = "/dev/mapper/fox-archive";
+      "/audio" = "/dev/mapper/fox-audio";
+      
+      # Windows LTSC integration (read-only by default)
+      "/mnt/windows" = {
+        "makoto-system" = "/dev/nvme1n1p3";  # C: drive
+        "user-koto" = "/dev/nvme1n1p4";      # D: drive  
+        "programs" = "/dev/nvme1n1p5";       # E: drive
+        "games" = "/dev/nvme1n1p6";          # F: drive
+        "work" = "/dev/nvme1n1p7";           # G: drive
+      };
+      
+      # Experimental OS mounts
+      "/weirdos" = {
+        "guix" = "/dev/sdc1";
+        "templeos" = "/dev/sdc2"; 
+        "haiku" = "/dev/sdc3";
+        "openindiana" = "/dev/sdc4";
+      };
+    };
+    
+    # 🔧 Storage roles and optimization
+    storage = {
+      performance = [ "/soleflare/gaming" "/audio/daw-projects" ];
+      archive = [ "/archive" "/den/archive" ];
+      encrypted = [ "fox-*" "north-*" "south-*" "east-*" "west-*" ];
+      windows-integration = true;
+      cross-platform-access = true;
+    };
+  };
+
+  # 🎯 Boot loader configuration - Multi-OS Management
+  boot = {
+    loader = {
+      systemd-boot.enable = false;
+      grub = {
+        enable = true;
+        version = 2;
+        efiSupport = true;
+        efiInstallAsRemovable = false;
+        device = "nodev";
+        useOSProber = true; # Detect Windows LTSC & other OS partitions
+        
+        # 🦊 FoxOS GRUB Theme
+        theme = pkgs.stdenv.mkDerivation {
+          name = "foxos-grub-theme";
+          src = ./themes/grub/foxos-octaquad;
+          installPhase = ''
+            mkdir -p $out
+            cp -r * $out/
+          '';
+        };
+        
+        # Custom menu entries for the spider web
+        extraEntries = ''
+          # Windows LTSC Enterprise/IoT
+          menuentry "Windows LTSC (Makoto-System)" {
+            insmod part_gpt
+            insmod fat
+            insmod ntfs
+            insmod chain
+            search --no-floppy --fs-uuid --set=root [WINDOWS-EFI-UUID]
+            chainloader /EFI/Microsoft/Boot/bootmgfw.efi
+          }
+          
+          # Arch Linux (if installed)  
+          menuentry "Arch Linux (Eastern Territory)" {
+            insmod part_gpt
+            insmod ext2
+            search --no-floppy --fs-uuid --set=root [ARCH-UUID]
+            linux /boot/vmlinuz-linux root=UUID=[ARCH-ROOT-UUID] rw
+            initrd /boot/initramfs-linux.img
+          }
+          
+          # Garuda Linux (if installed)
+          menuentry "Garuda Gaming Realm" {
+            insmod part_gpt  
+            insmod ext2
+            search --no-floppy --fs-uuid --set=root [GARUDA-UUID]
+            linux /boot/vmlinuz-linux-zen root=UUID=[GARUDA-ROOT-UUID] rw
+            initrd /boot/initramfs-linux-zen.img
+          }
+          
+          # GUIX System (if installed)
+          menuentry "GUIX System (Weirdos Cube)" {
+            insmod part_gpt
+            insmod ext2  
+            search --no-floppy --fs-uuid --set=root [GUIX-UUID]
+            linux /gnu/store/[GUIX-KERNEL-PATH]/bzImage root=UUID=[GUIX-ROOT-UUID]
+            initrd /gnu/store/[GUIX-INITRD-PATH]/initrd
+          }
+        '';
+      };
+      
+      # Timeout for multi-boot selection
+      timeout = 30;
+    };
+    
+    # 🔓 LUKS support for FoxOS partitions
+    initrd.luks.devices = {
+      "fox-frostcore" = {
+        device = "/dev/nvme0n1p2";
+        preLVM = true;
+      };
+      "north-frostlands" = {
+        device = "/dev/nvme0n1p3"; 
+        preLVM = true;
+      };
+    };
+    
+    # 🔧 Kernel parameters for optimal performance
+    kernelParams = [
+      "quiet"
+      "splash" 
+      "rd.systemd.show_status=false"
+      "rd.udev.log_level=3"
+      "udev.log_priority=3"
+    ];
+  };
+}
+
+# 🕷️ END OF OCTAQUAD FOUNDATION
+# "Eight legs, one web, infinite possibilities"
+# 
+# Usage in your flake.nix:
+# inputs.disko.nixosModules.disko
+# ./foxos-disko-base.nix
+#
+# Customize sizes, add/remove partitions as needed
+# Each quadrant can be toggled via foxos.quadrants.*
